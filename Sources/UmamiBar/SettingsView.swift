@@ -23,16 +23,16 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("Type", selection: $kind) {
-                ForEach(ServerKind.allCases) { k in
-                    Text(k.title).tag(k)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
+                    Picker("Type", selection: $kind) {
+                        ForEach(ServerKind.allCases) { k in
+                            Text(k.title).tag(k)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
                     if kind == .cloud {
                         row("API key") {
                             SecureField("", text: $apiKey, prompt: Text("umami_api_…"))
@@ -47,9 +47,11 @@ struct SettingsView: View {
                             .fixedSize()
                         }
                         row("") {
-                            Text("Create a key at cloud.umami.is → Settings → API keys")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Link(destination: URL(string: "https://cloud.umami.is/settings/api-keys")!) {
+                                Text("Create a key at cloud.umami.is → Settings → API keys")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     } else {
                         row("Server URL") {
@@ -62,12 +64,30 @@ struct SettingsView: View {
                             SecureField("", text: $password)
                         }
                     }
+
+                    HStack(spacing: 8) {
+                        Button(isTesting ? "Testing…" : "Test Connection") {
+                            testConnection()
+                        }
+                        .disabled(isTesting)
+
+                        if isTesting {
+                            ProgressView().controlSize(.small)
+                        } else if let testResult {
+                            Label {
+                                Text(testResult).lineLimit(1).truncationMode(.middle)
+                            } icon: {
+                                Image(systemName: testSucceeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(testSucceeded ? .green : .red)
+                        }
+                    }
                 }
                 .textFieldStyle(.roundedBorder)
                 .padding(6)
             } label: {
-                Label(kind == .cloud ? "Umami Cloud" : "Self-hosted server",
-                      systemImage: kind == .cloud ? "cloud" : "server.rack")
+                Label("Connection", systemImage: "globe")
             }
 
             GroupBox {
@@ -109,24 +129,7 @@ struct SettingsView: View {
                 Label("General", systemImage: "gearshape")
             }
 
-            HStack(spacing: 8) {
-                Button(isTesting ? "Testing…" : "Test Connection") {
-                    testConnection()
-                }
-                .disabled(isTesting)
-
-                if isTesting {
-                    ProgressView().controlSize(.small)
-                } else if let testResult {
-                    Label {
-                        Text(testResult).lineLimit(1).truncationMode(.middle)
-                    } icon: {
-                        Image(systemName: testSucceeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(testSucceeded ? .green : .red)
-                }
-
+            HStack {
                 Spacer()
 
                 Button("Save") {
@@ -138,7 +141,13 @@ struct SettingsView: View {
         .padding(20)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
-        .onAppear(perform: loadFromStore)
+        .onAppear {
+            loadFromStore()
+            NSApp.setActivationPolicy(.regular)
+        }
+        .onDisappear {
+            NSApp.setActivationPolicy(.accessory)
+        }
         .onChange(of: kind) { _, _ in testResult = nil }
     }
 

@@ -4,7 +4,7 @@ import UmamiBarCore
 
 struct PopoverView: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -68,12 +68,12 @@ struct PopoverView: View {
                 .foregroundStyle(.secondary)
             Text("Connect to Umami")
                 .font(.headline)
-            Text("Add your Umami Cloud API key or self-hosted server to see analytics here.")
+            Text("Add your Umami Cloud API key or self-hosted server details.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Open Settings…") {
-                openSettings()
+                openWindow(id: "settings")
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
@@ -120,15 +120,13 @@ struct PopoverView: View {
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach(store.sites.sorted(by: { $0.website.name < $1.website.name })) { site in
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
+                        HoverableButton {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 1.0)) {
                                 store.toggle(site: site)
                             }
                         } label: {
                             rowLabel(site)
                         }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
 
                         if store.expandedSiteId == site.id {
                             detailView(site)
@@ -140,7 +138,7 @@ struct PopoverView: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(height: min(400, CGFloat(max(store.sites.count, 1)) * 50 + (store.expandedSiteId != nil ? 190 : 0)))
+            .frame(maxHeight: 400)
 
             if store.sites.isEmpty && !store.isLoading {
                 Text("No websites")
@@ -223,6 +221,7 @@ struct PopoverView: View {
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.vertical, 2)
                 .padding(.horizontal, 4)
                 .background {
@@ -235,6 +234,7 @@ struct PopoverView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 3))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func detailView(_ site: SiteSnapshot) -> some View {
@@ -256,7 +256,9 @@ struct PopoverView: View {
                         detailList(title: "Top pages", rows: detail.topPages)
                         detailList(title: "Top referrers", rows: detail.topReferrers)
                     }
+                    .frame(maxWidth: .infinity)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ProgressView()
                     .controlSize(.small)
@@ -315,7 +317,7 @@ struct PopoverView: View {
                     }
                 }
                 Button("Settings…") {
-                    openSettings()
+                    openWindow(id: "settings")
                     NSApp.activate(ignoringOtherApps: true)
                 }
                 Divider()
@@ -328,5 +330,32 @@ struct PopoverView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
         }
+    }
+}
+
+struct HoverableButton<Label: View>: View {
+    @State private var isHovering = false
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        Button(action: action) {
+            label()
+        }
+        .buttonStyle(HoverButtonStyle(isHovering: isHovering))
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+    }
+}
+
+struct HoverButtonStyle: ButtonStyle {
+    let isHovering: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.1 : (isHovering ? 0.05 : 0)))
+            )
     }
 }

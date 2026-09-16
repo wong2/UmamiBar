@@ -15,7 +15,7 @@ struct UmamiBarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
+        Window("Settings", id: "settings") {
             SettingsView()
                 .environment(store)
         }
