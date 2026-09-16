@@ -1,10 +1,16 @@
 import Foundation
 import UmamiBarCore
 
+struct SiteDetail {
+    var topPages: [MetricRow]
+    var topReferrers: [MetricRow]
+}
+
 struct SiteSnapshot: Identifiable {
     let website: Website
     var stats: WebsiteStats?
     var active: Int?
+    var detail: SiteDetail?
     var id: String { website.id }
 }
 
@@ -17,6 +23,7 @@ final class AppStore {
     var websites: [Website] = []
     var sites: [SiteSnapshot] = []
     var range: DateRange
+    var expandedSiteId: String?
     var isLoading = false
     var errorMessage: String?
     var lastUpdated: Date?
@@ -115,11 +122,41 @@ final class AppStore {
             return snap
         }
         errorMessage = failures == targets.count ? "Failed to load stats for all websites." : nil
+
+        if let expandedSiteId {
+            await loadDetail(for: expandedSiteId)
+        }
+    }
+
+    func toggle(site: SiteSnapshot) {
+        if expandedSiteId == site.id {
+            expandedSiteId = nil
+        } else {
+            expandedSiteId = site.id
+            Task { await loadDetail(for: site.id) }
+        }
+    }
+
+    func loadDetail(for id: String) async {
+        do {
+            async let pages = client.metrics(websiteId: id, range: range, type: "path")
+            async let referrers = client.metrics(websiteId: id, range: range, type: "referrer")
+            let detail = try await SiteDetail(topPages: Array(pages.prefix(5)),
+                                            topReferrers: Array(referrers.prefix(5)))
+            if let index = sites.firstIndex(where: { $0.id == id }) {
+                sites[index].detail = detail
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func select(range: DateRange) {
         self.range = range
         settings.dateRange = range
+        for index in sites.indices {
+            sites[index].detail = nil
+        }
         Task { await refresh() }
     }
 
@@ -145,6 +182,7 @@ final class AppStore {
         settings.clearSession()
         websites = []
         sites = []
+        expandedSiteId = nil
         errorMessage = nil
         lastUpdated = nil
         Task {

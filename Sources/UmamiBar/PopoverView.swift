@@ -120,45 +120,148 @@ struct PopoverView: View {
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach(store.sites.sorted(by: { $0.website.name < $1.website.name })) { site in
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(site.website.name)
-                                    .font(.callout)
-                                    .lineLimit(1)
-                                if let active = site.active, active > 0 {
-                                    HStack(spacing: 3) {
-                                        Circle()
-                                            .fill(.green)
-                                            .frame(width: 6, height: 6)
-                                        Text("\(active) active")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                } else {
-                                    Text(site.website.domain)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                store.toggle(site: site)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        } label: {
+                            rowLabel(site)
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
 
-                            metricCell(site.stats?.visitors, site.stats?.comparison?.visitors)
-                            metricCell(site.stats?.pageviews, site.stats?.comparison?.pageviews)
-                            metricCell(site.stats?.visits, site.stats?.comparison?.visits)
+                        if store.expandedSiteId == site.id {
+                            detailView(site)
+                                .padding(.leading, 18)
+                                .padding(.bottom, 4)
                         }
                         Divider()
                     }
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(height: min(360, CGFloat(max(store.sites.count, 1)) * 50))
+            .frame(height: min(400, CGFloat(max(store.sites.count, 1)) * 50 + (store.expandedSiteId != nil ? 190 : 0)))
 
             if store.sites.isEmpty && !store.isLoading {
                 Text("No websites")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func rowLabel(_ site: SiteSnapshot) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(store.expandedSiteId == site.id ? 90 : 0))
+                .frame(width: 10)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(site.website.name)
+                    .font(.callout)
+                    .lineLimit(1)
+                if let active = site.active, active > 0 {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(.green)
+                            .frame(width: 6, height: 6)
+                        Text("\(active) active")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(site.website.domain)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            metricCell(site.stats?.visitors, site.stats?.comparison?.visitors)
+            metricCell(site.stats?.pageviews, site.stats?.comparison?.pageviews)
+            metricCell(site.stats?.visits, site.stats?.comparison?.visits)
+        }
+    }
+
+    private func detailStat(_ title: String, value: Double, previous: Double?, format: (Double) -> String, lowerIsBetter: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(format(value))
+                    .font(.callout)
+                if let previous, previous > 0 {
+                    let delta = (value - previous) / previous
+                    let good = lowerIsBetter ? delta < 0 : delta >= 0
+                    Text(String(format: "%@%.0f%%", delta >= 0 ? "↑" : "↓", abs(delta) * 100))
+                        .font(.caption2)
+                        .foregroundStyle(good ? .green : .red)
+                }
+            }
+        }
+    }
+
+    private func detailList(title: String, rows: [MetricRow]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            let max = rows.map(\.y).max() ?? 1
+            ForEach(rows) { row in
+                HStack {
+                    Text(row.x.isEmpty ? "(direct)" : row.x)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Text(compactNumber(row.y))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 2)
+                .padding(.horizontal, 4)
+                .background {
+                    GeometryReader { geo in
+                        Rectangle()
+                            .fill(Color.accentColor.opacity(0.12))
+                            .frame(width: geo.size.width * CGFloat(row.y / max))
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+        }
+    }
+
+    private func detailView(_ site: SiteSnapshot) -> some View {
+        Group {
+            if let detail = site.detail, let stats = site.stats {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 24) {
+                        detailStat("Bounce rate",
+                                   value: stats.visits > 0 ? stats.bounces / stats.visits : 0,
+                                   previous: stats.comparison.map { $0.visits > 0 ? $0.bounces / $0.visits : 0 },
+                                   format: percent,
+                                   lowerIsBetter: true)
+                        detailStat("Avg. visit",
+                                   value: stats.visits > 0 ? stats.totaltime / stats.visits : 0,
+                                   previous: stats.comparison.map { $0.visits > 0 ? $0.totaltime / $0.visits : 0 },
+                                   format: { duration(seconds: $0) })
+                    }
+                    HStack(alignment: .top, spacing: 12) {
+                        detailList(title: "Top pages", rows: detail.topPages)
+                        detailList(title: "Top referrers", rows: detail.topReferrers)
+                    }
+                }
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
             }
         }
     }
