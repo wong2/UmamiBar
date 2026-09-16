@@ -13,8 +13,8 @@ struct UmamiBarApp: App {
         } label: {
             HStack(spacing: 2) {
                 Image(systemName: "chart.bar.xaxis")
-                if store.settings.showActiveInMenuBar, let active = store.active {
-                    Text("\(active)")
+                if store.settings.showActiveInMenuBar, store.totalActive > 0 {
+                    Text("\(store.totalActive)")
                 }
             }
         }

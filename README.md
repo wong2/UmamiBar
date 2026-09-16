@@ -1,6 +1,6 @@
 # UmamiBar
 
-A native macOS menu bar app for viewing your Umami website analytics — live visitors, pageviews, top pages and referrers — without opening a browser.
+A native macOS menu bar app for viewing your Umami website analytics — live visitors, views and visits for all your websites in one scrolling list — without opening a browser.
 
 ![Screenshot](docs/screenshot.png)
 

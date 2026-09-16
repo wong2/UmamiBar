@@ -1,5 +1,4 @@
 import AppKit
-import Charts
 import SwiftUI
 import UmamiBarCore
 
@@ -13,9 +12,7 @@ struct PopoverView: View {
                 emptyState
             } else {
                 header
-                statGrid
-                chart
-                topLists
+                siteList
                 if let message = store.errorMessage {
                     errorBanner(message)
                 }
@@ -26,7 +23,7 @@ struct PopoverView: View {
         .padding(12)
         .frame(width: 360)
         .overlay {
-            if store.isLoading && store.stats == nil && store.settings.isConfigured {
+            if store.isLoading && store.sites.allSatisfy({ $0.stats == nil }) && store.settings.isConfigured {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(.ultraThinMaterial)
@@ -46,25 +43,8 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Menu {
-                ForEach(store.websites) { site in
-                    Button {
-                        store.select(website: site)
-                    } label: {
-                        VStack(alignment: .leading) {
-                            Text(site.name)
-                            Text(site.domain)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } label: {
-                Text(store.selectedWebsite?.name ?? "Select website")
-                    .font(.system(.headline))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
+            Text("Websites")
+                .font(.headline)
 
             Spacer()
 
@@ -101,122 +81,80 @@ struct PopoverView: View {
         .padding(.vertical, 24)
     }
 
-    private struct StatCard: View {
-        let title: String
-        let value: String
-        let delta: Double?
-        var lowerIsBetter = false
+    private func deltaText(_ current: Double, _ previous: Double?) -> Text {
+        guard let previous, previous > 0 else { return Text("") }
+        let delta = (current - previous) / previous
+        return Text(String(format: "%@%.0f%%", delta >= 0 ? "↑" : "↓", abs(delta) * 100))
+            .foregroundStyle(delta >= 0 ? .green : .red)
+    }
 
-        var body: some View {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value)
-                        .font(.title2.weight(.semibold))
-                        .monospacedDigit()
-                    if let delta {
-                        let good = lowerIsBetter ? delta < 0 : delta >= 0
-                        Text(String(format: "%@%.0f%%", delta >= 0 ? "↑" : "↓", abs(delta) * 100))
-                            .font(.caption2)
-                            .foregroundStyle(good ? .green : .red)
+    private func metricCell(_ value: Double?, _ previous: Double?) -> some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text(value.map(compactNumber) ?? "–")
+                .font(.callout.weight(.medium))
+                .monospacedDigit()
+            deltaText(value ?? 0, previous)
+                .font(.caption2)
+        }
+    }
+
+    private var siteList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 2) {
+                GridRow {
+                    Text("")
+                    Text("Visitors")
+                    Text("Views")
+                    Text("Visits")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            ScrollView {
+                Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+                    ForEach(store.sites.sorted(by: { $0.website.name < $1.website.name })) { site in
+                        GridRow {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(site.website.name)
+                                    .font(.callout)
+                                    .lineLimit(1)
+                                if let active = site.active, active > 0 {
+                                    HStack(spacing: 3) {
+                                        Circle()
+                                            .fill(.green)
+                                            .frame(width: 6, height: 6)
+                                        Text("\(active) active")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                } else {
+                                    Text(site.website.domain)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .gridColumnAlignment(.leading)
+
+                            metricCell(site.stats?.visitors, site.stats?.comparison?.visitors)
+                            metricCell(site.stats?.pageviews, site.stats?.comparison?.pageviews)
+                            metricCell(site.stats?.visits, site.stats?.comparison?.visits)
+                        }
+                        Divider()
+                            .gridCellUnsizedAxes(.horizontal)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(height: min(360, CGFloat(max(store.sites.count, 1)) * 46))
 
-    private func delta(_ current: Double, _ previous: Double?) -> Double? {
-        guard let previous, previous > 0 else { return nil }
-        return (current - previous) / previous
-    }
-
-    private var statGrid: some View {
-        let s = store.stats
-        let bounceRate = s.map { $0.visits > 0 ? $0.bounces / $0.visits : 0 } ?? 0
-        let prevBounceRate = s?.comparison.map { $0.visits > 0 ? $0.bounces / $0.visits : 0 }
-        let avgTime = s.map { $0.visits > 0 ? $0.totaltime / $0.visits : 0 } ?? 0
-        let prevAvgTime = s?.comparison.map { $0.visits > 0 ? $0.totaltime / $0.visits : 0 }
-
-        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            StatCard(title: "Visitors", value: compactNumber(s?.visitors ?? 0), delta: delta(s?.visitors ?? 0, s?.comparison?.visitors))
-            StatCard(title: "Views", value: compactNumber(s?.pageviews ?? 0), delta: delta(s?.pageviews ?? 0, s?.comparison?.pageviews))
-            StatCard(title: "Visits", value: compactNumber(s?.visits ?? 0), delta: delta(s?.visits ?? 0, s?.comparison?.visits))
-            StatCard(title: "Bounce rate", value: percent(bounceRate), delta: delta(bounceRate, prevBounceRate), lowerIsBetter: true)
-            StatCard(title: "Avg. visit", value: duration(seconds: avgTime), delta: delta(avgTime, prevAvgTime))
-        }
-    }
-
-    private var chart: some View {
-        Group {
-            if let series = store.series, series.pageviews.count >= 2 {
-                Chart {
-                    ForEach(Array(series.pageviews.enumerated()), id: \.offset) { _, point in
-                        if let date = point.date {
-                            AreaMark(x: .value("Time", date), y: .value("Views", point.y))
-                                .foregroundStyle(Gradient(colors: [.accentColor.opacity(0.3), .accentColor.opacity(0.02)]))
-                            LineMark(x: .value("Time", date), y: .value("Views", point.y))
-                                .foregroundStyle(Color.accentColor)
-                        }
-                    }
-                }
-                .chartXAxis(.hidden)
-                .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
-                        AxisGridLine()
-                        AxisValueLabel()
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.top, 4)
-            } else {
-                Text("Not enough data yet")
+            if store.sites.isEmpty && !store.isLoading {
+                Text("No websites")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
             }
-        }
-        .frame(height: 90)
-    }
-
-    private func metricList(title: String, rows: [MetricRow]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            let max = rows.map(\.y).max() ?? 1
-            ForEach(rows) { row in
-                HStack {
-                    Text(row.x.isEmpty ? "(direct)" : row.x)
-                        .font(.callout)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 8)
-                    Text(compactNumber(row.y))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 2)
-                .padding(.horizontal, 4)
-                .background {
-                    GeometryReader { geo in
-                        Rectangle()
-                            .fill(Color.accentColor.opacity(0.12))
-                            .frame(width: geo.size.width * CGFloat(row.y / max))
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-            }
-        }
-    }
-
-    private var topLists: some View {
-        HStack(alignment: .top, spacing: 12) {
-            metricList(title: "Top pages", rows: store.topPages)
-            metricList(title: "Top referrers", rows: store.topReferrers)
         }
     }
 
@@ -240,7 +178,7 @@ struct PopoverView: View {
                 Circle()
                     .fill(.green)
                     .frame(width: 7, height: 7)
-                Text("\(store.active ?? 0) active")
+                Text("\(store.totalActive) active")
                     .font(.caption)
             }
 
