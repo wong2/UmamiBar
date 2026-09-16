@@ -5,6 +5,7 @@ import UmamiBarCore
 struct PopoverView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openWindow) private var openWindow
+    @State private var listHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -18,17 +19,13 @@ struct PopoverView: View {
                 }
             }
 
+            if store.settings.isConfigured {
+                Divider()
+            }
             footer
         }
         .padding(12)
-        .frame(width: 360)
-        .overlay {
-            if store.isLoading && store.sites.allSatisfy({ $0.stats == nil }) && store.settings.isConfigured {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.ultraThinMaterial)
-            }
-        }
+        .frame(width: 380)
         .task {
             await store.loadWebsites()
             await store.refresh()
@@ -43,7 +40,7 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Websites")
+            Text("UmamiBar")
                 .font(.headline)
 
             Spacer()
@@ -88,12 +85,14 @@ struct PopoverView: View {
             .foregroundStyle(delta >= 0 ? .green : .red)
     }
 
-    private static let metricWidth: CGFloat = 60
+    private static let metricWidth: CGFloat = 58
+    private static let metricSpacing: CGFloat = 8
+    private static let rowIndent: CGFloat = 20
 
     private func metricCell(_ value: Double?, _ previous: Double?) -> some View {
         VStack(alignment: .trailing, spacing: 1) {
             Text(value.map(compactNumber) ?? "–")
-                .font(.callout.weight(.medium))
+                .font(.callout)
                 .monospacedDigit()
             deltaText(value ?? 0, previous)
                 .font(.caption2)
@@ -103,48 +102,62 @@ struct PopoverView: View {
 
     private func columnHeader(_ title: String) -> some View {
         Text(title)
-            .font(.caption)
+            .font(.caption2)
             .foregroundStyle(.secondary)
             .frame(width: Self.metricWidth, alignment: .trailing)
     }
 
     private var siteList: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Self.metricSpacing) {
                 Spacer(minLength: 0)
                 columnHeader("Visitors")
                 columnHeader("Views")
                 columnHeader("Visits")
             }
+            .padding(.bottom, 2)
 
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(store.sites.sorted(by: { $0.website.name < $1.website.name })) { site in
-                        HoverableButton {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 1.0)) {
-                                store.toggle(site: site)
-                            }
-                        } label: {
-                            rowLabel(site)
-                        }
-
-                        if store.expandedSiteId == site.id {
-                            detailView(site)
-                                .padding(.leading, 18)
-                                .padding(.bottom, 4)
-                        }
-                        Divider()
+            let sorted = store.sites.sorted(by: { $0.website.name < $1.website.name })
+            if sorted.isEmpty {
+                Group {
+                    if store.isLoading || (store.lastUpdated == nil && store.errorMessage == nil) {
+                        ProgressView()
+                    } else {
+                        Text("No websites")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: 400)
+                .frame(maxWidth: .infinity)
+                .frame(height: 120)
+            } else {
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(sorted) { site in
+                            HoverableButton {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 1.0)) {
+                                    store.toggle(site: site)
+                                }
+                            } label: {
+                                rowLabel(site)
+                            }
 
-            if store.sites.isEmpty && !store.isLoading {
-                Text("No websites")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
+                            if store.expandedSiteId == site.id {
+                                detailView(site)
+                                    .padding(.leading, Self.rowIndent)
+                                    .padding(.bottom, 4)
+                            }
+
+                            if site.id != sorted.last?.id {
+                                Divider()
+                                    .padding(.leading, Self.rowIndent)
+                            }
+                        }
+                    }
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { listHeight = $0 }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(height: listHeight == 0 ? nil : min(listHeight, 400))
             }
         }
     }
@@ -152,20 +165,20 @@ struct PopoverView: View {
     private func rowLabel(_ site: SiteSnapshot) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
                 .rotationEffect(.degrees(store.expandedSiteId == site.id ? 90 : 0))
-                .frame(width: 10)
+                .frame(width: 12)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(site.website.name)
-                    .font(.callout)
+                    .font(.callout.weight(.medium))
                     .lineLimit(1)
                 if let active = site.active, active > 0 {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Circle()
                             .fill(.green)
-                            .frame(width: 6, height: 6)
+                            .frame(width: 5, height: 5)
                         Text("\(active) active")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -179,29 +192,13 @@ struct PopoverView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            metricCell(site.stats?.visitors, site.stats?.comparison?.visitors)
-            metricCell(site.stats?.pageviews, site.stats?.comparison?.pageviews)
-            metricCell(site.stats?.visits, site.stats?.comparison?.visits)
-        }
-    }
-
-    private func detailStat(_ title: String, value: Double, previous: Double?, format: (Double) -> String, lowerIsBetter: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(format(value))
-                    .font(.callout)
-                if let previous, previous > 0 {
-                    let delta = (value - previous) / previous
-                    let good = lowerIsBetter ? delta < 0 : delta >= 0
-                    Text(String(format: "%@%.0f%%", delta >= 0 ? "↑" : "↓", abs(delta) * 100))
-                        .font(.caption2)
-                        .foregroundStyle(good ? .green : .red)
-                }
+            HStack(spacing: Self.metricSpacing) {
+                metricCell(site.stats?.visitors, site.stats?.comparison?.visitors)
+                metricCell(site.stats?.pageviews, site.stats?.comparison?.pageviews)
+                metricCell(site.stats?.visits, site.stats?.comparison?.visits)
             }
         }
+        .padding(.vertical, 3)
     }
 
     private func detailList(title: String, rows: [MetricRow]) -> some View {
@@ -239,26 +236,12 @@ struct PopoverView: View {
 
     private func detailView(_ site: SiteSnapshot) -> some View {
         Group {
-            if let detail = site.detail, let stats = site.stats {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 24) {
-                        detailStat("Bounce rate",
-                                   value: stats.visits > 0 ? stats.bounces / stats.visits : 0,
-                                   previous: stats.comparison.map { $0.visits > 0 ? $0.bounces / $0.visits : 0 },
-                                   format: percent,
-                                   lowerIsBetter: true)
-                        detailStat("Avg. visit",
-                                   value: stats.visits > 0 ? stats.totaltime / stats.visits : 0,
-                                   previous: stats.comparison.map { $0.visits > 0 ? $0.totaltime / $0.visits : 0 },
-                                   format: { duration(seconds: $0) })
-                    }
-                    HStack(alignment: .top, spacing: 12) {
-                        detailList(title: "Top pages", rows: detail.topPages)
-                        detailList(title: "Top referrers", rows: detail.topReferrers)
-                    }
-                    .frame(maxWidth: .infinity)
+            if let detail = site.detail {
+                HStack(alignment: .top, spacing: 12) {
+                    detailList(title: "Top pages", rows: detail.topPages)
+                    detailList(title: "Top referrers", rows: detail.topReferrers)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
             } else {
                 ProgressView()
                     .controlSize(.small)
@@ -325,9 +308,10 @@ struct PopoverView: View {
                     NSApp.terminate(nil)
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Image(systemName: "ellipsis")
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
         }
     }

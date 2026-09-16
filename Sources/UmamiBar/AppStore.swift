@@ -41,6 +41,8 @@ final class AppStore {
 
     func loadWebsites() async {
         guard settings.isConfigured else { return }
+        isLoading = true
+        defer { isLoading = false }
         do {
             let list = try await client.websites()
             websites = list
@@ -50,6 +52,7 @@ final class AppStore {
                 }
                 return SiteSnapshot(website: site)
             }
+            lastUpdated = Date()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

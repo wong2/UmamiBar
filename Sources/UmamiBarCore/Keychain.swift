@@ -6,15 +6,14 @@ public struct Keychain: Sendable {
 
     public static func set(_ value: String, for key: String) {
         let data = Data(value.utf8)
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
         ]
         SecItemDelete(query as CFDictionary)
-        var attributes = query
-        attributes[kSecValueData as String] = data
-        SecItemAdd(attributes as CFDictionary, nil)
+        query[kSecValueData as String] = data
+        SecItemAdd(query as CFDictionary, nil)
     }
 
     public static func get(_ key: String) -> String? {
