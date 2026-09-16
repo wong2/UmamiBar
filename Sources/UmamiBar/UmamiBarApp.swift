@@ -24,5 +24,6 @@ struct UmamiBarApp: App {
             SettingsView()
                 .environment(store)
         }
+        .windowResizability(.contentSize)
     }
 }

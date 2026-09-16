@@ -20,85 +20,140 @@ struct SettingsView: View {
     @State private var testSucceeded = false
     @State private var isTesting = false
 
+    private static let labelWidth: CGFloat = 96
+
     var body: some View {
-        Form {
-            Section("Server") {
-                Picker("Type", selection: $kind) {
-                    ForEach(ServerKind.allCases) { k in
-                        Text(k.title).tag(k)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                if kind == .cloud {
-                    SecureField("API key", text: $apiKey)
-                    Picker("Region", selection: $region) {
-                        ForEach(CloudRegion.allCases) { r in
-                            Text(r.title).tag(r)
-                        }
-                    }
-                    Text("Create a key at cloud.umami.is → Settings → API keys")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    TextField("Server URL", text: $baseURL, prompt: Text("https://analytics.example.com"))
-                    TextField("Username", text: $username)
-                    SecureField("Password", text: $password)
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("Type", selection: $kind) {
+                ForEach(ServerKind.allCases) { k in
+                    Text(k.title).tag(k)
                 }
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
-            Section("General") {
-                Toggle("Show active visitors in menu bar", isOn: $showActive)
-                Picker("Refresh every", selection: $refreshInterval) {
-                    Text("30 seconds").tag(TimeInterval(30))
-                    Text("1 minute").tag(TimeInterval(60))
-                    Text("5 minutes").tag(TimeInterval(300))
-                }
-                Toggle("Launch at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, newValue in
-                        do {
-                            if newValue {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    if kind == .cloud {
+                        row("API key") {
+                            SecureField("", text: $apiKey, prompt: Text("umami_api_…"))
+                        }
+                        row("Region") {
+                            Picker("", selection: $region) {
+                                ForEach(CloudRegion.allCases) { r in
+                                    Text(r.title).tag(r)
+                                }
                             }
-                            launchError = nil
-                        } catch {
-                            launchError = error.localizedDescription
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                        row("") {
+                            Text("Create a key at cloud.umami.is → Settings → API keys")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        row("Server URL") {
+                            TextField("", text: $baseURL, prompt: Text("https://analytics.example.com"))
+                        }
+                        row("Username") {
+                            TextField("", text: $username)
+                        }
+                        row("Password") {
+                            SecureField("", text: $password)
                         }
                     }
-                if let launchError {
-                    Text(launchError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
                 }
+                .textFieldStyle(.roundedBorder)
+                .padding(6)
+            } label: {
+                Label(kind == .cloud ? "Umami Cloud" : "Self-hosted server",
+                      systemImage: kind == .cloud ? "cloud" : "server.rack")
             }
 
-            Section {
-                HStack {
-                    Button(isTesting ? "Testing…" : "Test Connection") {
-                        testConnection()
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    row("Refresh every") {
+                        Picker("", selection: $refreshInterval) {
+                            Text("30 seconds").tag(TimeInterval(30))
+                            Text("1 minute").tag(TimeInterval(60))
+                            Text("5 minutes").tag(TimeInterval(300))
+                        }
+                        .labelsHidden()
+                        .fixedSize()
                     }
-                    .disabled(isTesting)
-
-                    if let testResult {
-                        Text(testResult)
-                            .font(.caption)
-                            .foregroundStyle(testSucceeded ? .green : .red)
+                    row("Menu bar") {
+                        Toggle("Show active visitors", isOn: $showActive)
                     }
-
-                    Spacer()
-
-                    Button("Save") {
-                        save()
+                    row("Startup") {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Toggle("Launch at login", isOn: $launchAtLogin)
+                                .onChange(of: launchAtLogin) { _, newValue in
+                                    do {
+                                        if newValue {
+                                            try SMAppService.mainApp.register()
+                                        } else {
+                                            try SMAppService.mainApp.unregister()
+                                        }
+                                        launchError = nil
+                                    } catch {
+                                        launchError = error.localizedDescription
+                                    }
+                                }
+                            if let launchError {
+                                Text(launchError)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
                     }
-                    .keyboardShortcut(.defaultAction)
                 }
+                .padding(6)
+            } label: {
+                Label("General", systemImage: "gearshape")
+            }
+
+            HStack(spacing: 8) {
+                Button(isTesting ? "Testing…" : "Test Connection") {
+                    testConnection()
+                }
+                .disabled(isTesting)
+
+                if isTesting {
+                    ProgressView().controlSize(.small)
+                } else if let testResult {
+                    Label {
+                        Text(testResult).lineLimit(1).truncationMode(.middle)
+                    } icon: {
+                        Image(systemName: testSucceeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(testSucceeded ? .green : .red)
+                }
+
+                Spacer()
+
+                Button("Save") {
+                    save()
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 440)
+        .padding(20)
+        .frame(width: 460)
+        .fixedSize(horizontal: false, vertical: true)
         .onAppear(perform: loadFromStore)
+        .onChange(of: kind) { _, _ in testResult = nil }
+    }
+
+    private func row<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: Self.labelWidth, alignment: .trailing)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func loadFromStore() {
