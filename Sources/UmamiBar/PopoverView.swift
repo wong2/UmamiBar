@@ -88,6 +88,8 @@ struct PopoverView: View {
             .foregroundStyle(delta >= 0 ? .green : .red)
     }
 
+    private static let metricWidth: CGFloat = 60
+
     private func metricCell(_ value: Double?, _ previous: Double?) -> some View {
         VStack(alignment: .trailing, spacing: 1) {
             Text(value.map(compactNumber) ?? "–")
@@ -96,25 +98,29 @@ struct PopoverView: View {
             deltaText(value ?? 0, previous)
                 .font(.caption2)
         }
+        .frame(width: Self.metricWidth, alignment: .trailing)
+    }
+
+    private func columnHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(width: Self.metricWidth, alignment: .trailing)
     }
 
     private var siteList: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 2) {
-                GridRow {
-                    Text("")
-                    Text("Visitors")
-                    Text("Views")
-                    Text("Visits")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                columnHeader("Visitors")
+                columnHeader("Views")
+                columnHeader("Visits")
             }
 
             ScrollView {
-                Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+                VStack(spacing: 6) {
                     ForEach(store.sites.sorted(by: { $0.website.name < $1.website.name })) { site in
-                        GridRow {
+                        HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(site.website.name)
                                     .font(.callout)
@@ -135,19 +141,18 @@ struct PopoverView: View {
                                         .lineLimit(1)
                                 }
                             }
-                            .gridColumnAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                             metricCell(site.stats?.visitors, site.stats?.comparison?.visitors)
                             metricCell(site.stats?.pageviews, site.stats?.comparison?.pageviews)
                             metricCell(site.stats?.visits, site.stats?.comparison?.visits)
                         }
                         Divider()
-                            .gridCellUnsizedAxes(.horizontal)
                     }
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(height: min(360, CGFloat(max(store.sites.count, 1)) * 46))
+            .frame(height: min(360, CGFloat(max(store.sites.count, 1)) * 50))
 
             if store.sites.isEmpty && !store.isLoading {
                 Text("No websites")
