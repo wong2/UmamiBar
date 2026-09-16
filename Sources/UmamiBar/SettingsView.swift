@@ -12,7 +12,6 @@ struct SettingsView: View {
     @State private var baseURL = ""
     @State private var username = ""
     @State private var password = ""
-    @State private var showActive = true
     @State private var refreshInterval: TimeInterval = 60
     @State private var launchAtLogin = false
     @State private var launchError: String?
@@ -81,9 +80,6 @@ struct SettingsView: View {
                         }
                         .labelsHidden()
                         .fixedSize()
-                    }
-                    row("Menu bar") {
-                        Toggle("Show active visitors", isOn: $showActive)
                     }
                     row("Startup") {
                         VStack(alignment: .leading, spacing: 2) {
@@ -164,7 +160,6 @@ struct SettingsView: View {
         baseURL = s.baseURL
         username = s.username
         password = s.password
-        showActive = s.showActiveInMenuBar
         refreshInterval = s.refreshInterval
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
@@ -177,7 +172,6 @@ struct SettingsView: View {
     private func applyToStore() {
         let s = store.settings
         s.apply(formConnection)
-        s.showActiveInMenuBar = showActive
         s.refreshInterval = refreshInterval
     }
 

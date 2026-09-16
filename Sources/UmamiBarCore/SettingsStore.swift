@@ -39,11 +39,6 @@ public final class SettingsStore {
         set { defaults.set(newValue.rawValue, forKey: "dateRange"); revision += 1 }
     }
 
-    public var showActiveInMenuBar: Bool {
-        get { _ = revision; return defaults.object(forKey: "showActiveInMenuBar") as? Bool ?? true }
-        set { defaults.set(newValue, forKey: "showActiveInMenuBar"); revision += 1 }
-    }
-
     public var refreshInterval: TimeInterval {
         get {
             _ = revision

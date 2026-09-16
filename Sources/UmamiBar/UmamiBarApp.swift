@@ -11,12 +11,7 @@ struct UmamiBarApp: App {
             PopoverView()
                 .environment(store)
         } label: {
-            HStack(spacing: 2) {
-                Image(systemName: "chart.bar.xaxis")
-                if store.settings.showActiveInMenuBar, store.totalActive > 0 {
-                    Text("\(store.totalActive)")
-                }
-            }
+            Image(systemName: "chart.bar.xaxis")
         }
         .menuBarExtraStyle(.window)
 

@@ -28,10 +28,6 @@ final class AppStore {
     var errorMessage: String?
     var lastUpdated: Date?
 
-    var totalActive: Int {
-        sites.compactMap(\.active).reduce(0, +)
-    }
-
     private var refreshTask: Task<Void, Never>?
 
     init(settings: SettingsStore = SettingsStore()) {
