@@ -1,3 +1,4 @@
+import AppKit
 import ServiceManagement
 import SwiftUI
 import UmamiBarCore
@@ -113,14 +114,14 @@ struct SettingsView: View {
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
+    private var formConnection: Connection {
+        Connection(kind: kind, baseURL: baseURL, region: region,
+                   apiKey: apiKey, username: username, password: password)
+    }
+
     private func applyToStore() {
         let s = store.settings
-        s.kind = kind
-        s.apiKey = apiKey
-        s.region = region
-        s.baseURL = baseURL
-        s.username = username
-        s.password = password
+        s.apply(formConnection)
         s.showActiveInMenuBar = showActive
         s.refreshInterval = refreshInterval
     }
@@ -128,16 +129,10 @@ struct SettingsView: View {
     private func testConnection() {
         isTesting = true
         testResult = nil
-        let s = SettingsStore()
-        s.kind = kind
-        s.apiKey = apiKey
-        s.region = region
-        s.baseURL = baseURL
-        s.username = username
-        s.password = password
+        let client = UmamiClient(connection: formConnection, persistToken: false)
         Task {
             do {
-                let count = try await UmamiClient(settings: s).testConnection()
+                let count = try await client.testConnection()
                 await MainActor.run {
                     testResult = "Connected — \(count) website\(count == 1 ? "" : "s")"
                     testSucceeded = true
@@ -156,5 +151,6 @@ struct SettingsView: View {
     private func save() {
         applyToStore()
         store.reconfigure()
+        NSApplication.shared.keyWindow?.performClose(nil)
     }
 }

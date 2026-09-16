@@ -24,22 +24,26 @@ public enum UmamiError: LocalizedError, Sendable {
 }
 
 public actor UmamiClient {
-    private let settings: SettingsStore
+    private let connection: Connection
+    private let persistToken: Bool
     private let session: URLSession
     private let decoder = JSONDecoder()
+    private var token: String?
 
-    public init(settings: SettingsStore, session: URLSession = .shared) {
-        self.settings = settings
+    public init(connection: Connection, persistToken: Bool = true, session: URLSession = .shared) {
+        self.connection = connection
+        self.persistToken = persistToken
         self.session = session
+        self.token = persistToken ? Keychain.get("token") : nil
     }
 
     private func authHeader() async throws -> String {
-        switch settings.kind {
+        switch connection.kind {
         case .cloud:
-            guard !settings.apiKey.isEmpty else { throw UmamiError.notConfigured }
-            return "Bearer \(settings.apiKey)"
+            guard !connection.apiKey.isEmpty else { throw UmamiError.notConfigured }
+            return "Bearer \(connection.apiKey)"
         case .selfHosted:
-            if let token = settings.token {
+            if let token {
                 return "Bearer \(token)"
             }
             return try await login()
@@ -52,7 +56,7 @@ public actor UmamiClient {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        let body = ["username": settings.username, "password": settings.password]
+        let body = ["username": connection.username, "password": connection.password]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await session.data(for: req)
@@ -63,13 +67,23 @@ public actor UmamiClient {
         }
         struct LoginResponse: Decodable { let token: String }
         let decoded = try decoder.decode(LoginResponse.self, from: data)
-        settings.token = decoded.token
+        token = decoded.token
+        if persistToken {
+            Keychain.set(decoded.token, for: "token")
+        }
         return "Bearer \(decoded.token)"
     }
 
+    private func clearToken() {
+        token = nil
+        if persistToken {
+            Keychain.delete("token")
+        }
+    }
+
     private func makeURL(path: String, query: [String: String]) throws -> URL {
-        guard settings.isConfigured else { throw UmamiError.notConfigured }
-        let base = settings.config.apiBase
+        guard connection.isConfigured else { throw UmamiError.notConfigured }
+        let base = connection.apiBase
         guard var comps = URLComponents(string: base + path) else { throw UmamiError.invalidURL }
         if !query.isEmpty {
             comps.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
@@ -78,7 +92,7 @@ public actor UmamiClient {
         return url
     }
 
-    private func request<T: Decodable>(_ path: String, query: [String: String] = [:], retryOnUnauthorized: Bool = true) async throws -> T {
+    private func data(path: String, query: [String: String] = [:], retry: Bool = true) async throws -> Data {
         let url = try makeURL(path: path, query: query)
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -88,51 +102,24 @@ public actor UmamiClient {
         guard let http = response as? HTTPURLResponse else { throw UmamiError.invalidURL }
 
         if (http.statusCode == 401 || http.statusCode == 403),
-           retryOnUnauthorized, settings.kind == .selfHosted {
-            settings.clearSession()
-            return try await self.request(path, query: query, retryOnUnauthorized: false)
+           retry, connection.kind == .selfHosted {
+            clearToken()
+            return try await self.data(path: path, query: query, retry: false)
         }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 || http.statusCode == 403 { throw UmamiError.unauthorized }
             throw UmamiError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
         }
+        return data
+    }
+
+    private func request<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
+        let data = try await self.data(path: path, query: query)
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
             throw UmamiError.decoding(error.localizedDescription)
         }
-    }
-
-    private func rawRequest(path: String, query: [String: String] = [:]) async throws -> Data {
-        let url = try makeURL(path: path, query: query)
-        var req = URLRequest(url: url)
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse else { throw UmamiError.invalidURL }
-        if (http.statusCode == 401 || http.statusCode == 403), settings.kind == .selfHosted {
-            settings.clearSession()
-            return try await rawRequestOnce(path: path, query: query)
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 || http.statusCode == 403 { throw UmamiError.unauthorized }
-            throw UmamiError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
-        }
-        return data
-    }
-
-    private func rawRequestOnce(path: String, query: [String: String]) async throws -> Data {
-        let url = try makeURL(path: path, query: query)
-        var req = URLRequest(url: url)
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse else { throw UmamiError.invalidURL }
-        guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 || http.statusCode == 403 { throw UmamiError.unauthorized }
-            throw UmamiError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
-        }
-        return data
     }
 
     private func rangeQuery(_ range: DateRange) -> [String: String] {
@@ -143,7 +130,7 @@ public actor UmamiClient {
     }
 
     public func websites() async throws -> [Website] {
-        let data = try await rawRequest(path: "/websites", query: ["includeTeams": "true", "pageSize": "200"])
+        let data = try await self.data(path: "/websites", query: ["includeTeams": "true", "pageSize": "200"])
         return try WebsitesResult.decode(from: data, decoder: decoder)
     }
 
@@ -152,7 +139,7 @@ public actor UmamiClient {
     }
 
     public func active(websiteId: String) async throws -> Int {
-        let data = try await rawRequest(path: "/websites/\(websiteId)/active")
+        let data = try await self.data(path: "/websites/\(websiteId)/active")
         return try decoder.decode(ActiveVisitors.self, from: data).visitors
     }
 

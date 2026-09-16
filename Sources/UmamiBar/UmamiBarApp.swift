@@ -2,13 +2,6 @@ import AppKit
 import SwiftUI
 import UmamiBarCore
 
-enum SettingsOpener {
-    static func open() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-}
-
 @main
 struct UmamiBarApp: App {
     @State private var store = AppStore()

@@ -3,89 +3,100 @@ import Foundation
 @Observable
 public final class SettingsStore {
     private let defaults: UserDefaults
+    private var revision = 0
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
     public var kind: ServerKind {
-        get { ServerKind(rawValue: defaults.string(forKey: "kind") ?? "") ?? .cloud }
-        set { defaults.set(newValue.rawValue, forKey: "kind") }
+        get { _ = revision; return ServerKind(rawValue: defaults.string(forKey: "kind") ?? "") ?? .cloud }
+        set { defaults.set(newValue.rawValue, forKey: "kind"); revision += 1 }
     }
 
     public var baseURL: String {
-        get { defaults.string(forKey: "baseURL") ?? "" }
-        set { defaults.set(newValue, forKey: "baseURL") }
+        get { _ = revision; return defaults.string(forKey: "baseURL") ?? "" }
+        set { defaults.set(newValue, forKey: "baseURL"); revision += 1 }
     }
 
     public var region: CloudRegion {
-        get { CloudRegion(rawValue: defaults.string(forKey: "region") ?? "") ?? .auto }
-        set { defaults.set(newValue.rawValue, forKey: "region") }
+        get { _ = revision; return CloudRegion(rawValue: defaults.string(forKey: "region") ?? "") ?? .auto }
+        set { defaults.set(newValue.rawValue, forKey: "region"); revision += 1 }
     }
 
     public var username: String {
-        get { defaults.string(forKey: "username") ?? "" }
-        set { defaults.set(newValue, forKey: "username") }
+        get { _ = revision; return defaults.string(forKey: "username") ?? "" }
+        set { defaults.set(newValue, forKey: "username"); revision += 1 }
     }
 
     public var selectedWebsiteId: String? {
-        get { defaults.string(forKey: "selectedWebsiteId") }
-        set { defaults.set(newValue, forKey: "selectedWebsiteId") }
+        get { _ = revision; return defaults.string(forKey: "selectedWebsiteId") }
+        set { defaults.set(newValue, forKey: "selectedWebsiteId"); revision += 1 }
     }
 
     public var dateRange: DateRange {
-        get { DateRange(rawValue: defaults.string(forKey: "dateRange") ?? "") ?? .today }
-        set { defaults.set(newValue.rawValue, forKey: "dateRange") }
+        get { _ = revision; return DateRange(rawValue: defaults.string(forKey: "dateRange") ?? "") ?? .today }
+        set { defaults.set(newValue.rawValue, forKey: "dateRange"); revision += 1 }
     }
 
     public var showActiveInMenuBar: Bool {
-        get { defaults.object(forKey: "showActiveInMenuBar") as? Bool ?? true }
-        set { defaults.set(newValue, forKey: "showActiveInMenuBar") }
+        get { _ = revision; return defaults.object(forKey: "showActiveInMenuBar") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "showActiveInMenuBar"); revision += 1 }
     }
 
     public var refreshInterval: TimeInterval {
         get {
+            _ = revision
             let v = defaults.double(forKey: "refreshInterval")
             return v > 0 ? v : 60
         }
-        set { defaults.set(newValue, forKey: "refreshInterval") }
+        set { defaults.set(newValue, forKey: "refreshInterval"); revision += 1 }
     }
 
     public var apiKey: String {
-        get { Keychain.get("apiKey") ?? "" }
-        set { Keychain.set(newValue, for: "apiKey") }
+        get { _ = revision; return Keychain.get("apiKey") ?? "" }
+        set { Keychain.set(newValue, for: "apiKey"); revision += 1 }
     }
 
     public var password: String {
-        get { Keychain.get("password") ?? "" }
-        set { Keychain.set(newValue, for: "password") }
+        get { _ = revision; return Keychain.get("password") ?? "" }
+        set { Keychain.set(newValue, for: "password"); revision += 1 }
     }
 
     public var token: String? {
-        get { Keychain.get("token") }
+        get { _ = revision; return Keychain.get("token") }
         set {
             if let newValue {
                 Keychain.set(newValue, for: "token")
             } else {
                 Keychain.delete("token")
             }
+            revision += 1
         }
     }
 
     public var isConfigured: Bool {
-        switch kind {
-        case .cloud:
-            return !apiKey.isEmpty
-        case .selfHosted:
-            return !baseURL.isEmpty && !username.isEmpty && !password.isEmpty
-        }
+        connection.isConfigured
     }
 
-    public var config: ServerConfig {
-        ServerConfig(kind: kind, baseURL: baseURL, region: region)
+    public var connection: Connection {
+        _ = revision
+        return Connection(kind: kind, baseURL: baseURL, region: region,
+                          apiKey: apiKey, username: username, password: password)
+    }
+
+    public func apply(_ c: Connection) {
+        defaults.set(c.kind.rawValue, forKey: "kind")
+        defaults.set(c.baseURL, forKey: "baseURL")
+        defaults.set(c.region.rawValue, forKey: "region")
+        defaults.set(c.username, forKey: "username")
+        Keychain.set(c.apiKey, for: "apiKey")
+        Keychain.set(c.password, for: "password")
+        revision += 1
     }
 
     public func clearSession() {
         Keychain.delete("token")
+        revision += 1
     }
 }

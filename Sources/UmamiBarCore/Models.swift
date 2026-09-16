@@ -282,15 +282,31 @@ public enum CloudRegion: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-public struct ServerConfig: Sendable {
+public struct Connection: Sendable, Equatable {
     public var kind: ServerKind
     public var baseURL: String
     public var region: CloudRegion
+    public var apiKey: String
+    public var username: String
+    public var password: String
 
-    public init(kind: ServerKind, baseURL: String = "", region: CloudRegion = .auto) {
+    public init(kind: ServerKind, baseURL: String = "", region: CloudRegion = .auto,
+                apiKey: String = "", username: String = "", password: String = "") {
         self.kind = kind
         self.baseURL = baseURL
         self.region = region
+        self.apiKey = apiKey
+        self.username = username
+        self.password = password
+    }
+
+    public var isConfigured: Bool {
+        switch kind {
+        case .cloud:
+            return !apiKey.isEmpty
+        case .selfHosted:
+            return !baseURL.isEmpty && !username.isEmpty && !password.isEmpty
+        }
     }
 
     public var apiBase: String {

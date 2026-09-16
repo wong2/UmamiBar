@@ -23,7 +23,7 @@ final class AppStore {
 
     init(settings: SettingsStore = SettingsStore()) {
         self.settings = settings
-        self.client = UmamiClient(settings: settings)
+        self.client = UmamiClient(connection: settings.connection)
         self.range = settings.dateRange
         if settings.isConfigured {
             startAutoRefresh()
@@ -101,7 +101,7 @@ final class AppStore {
     }
 
     func reconfigure() {
-        client = UmamiClient(settings: settings)
+        client = UmamiClient(connection: settings.connection)
         settings.clearSession()
         websites = []
         selectedWebsite = nil

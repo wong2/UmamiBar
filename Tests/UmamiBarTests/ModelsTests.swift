@@ -55,4 +55,20 @@ final class ModelsTests: XCTestCase {
         let active = try JSONDecoder().decode(ActiveVisitors.self, from: json)
         XCTAssertEqual(active.visitors, 4)
     }
+
+    func testConnectionAPIBase() {
+        XCTAssertEqual(
+            Connection(kind: .cloud, region: .auto, apiKey: "k").apiBase,
+            "https://api.umami.is/v1")
+        XCTAssertEqual(
+            Connection(kind: .cloud, region: .us, apiKey: "k").apiBase,
+            "https://api.umami.is/v1/us")
+        XCTAssertEqual(
+            Connection(kind: .cloud, region: .eu, apiKey: "k").apiBase,
+            "https://api.umami.is/v1/eu")
+        XCTAssertEqual(
+            Connection(kind: .selfHosted, baseURL: "https://analytics.example.com/",
+                       username: "u", password: "p").apiBase,
+            "https://analytics.example.com/api")
+    }
 }
