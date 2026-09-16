@@ -281,32 +281,30 @@ struct PopoverView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 6) {
-            if store.settings.isConfigured {
-                Circle()
-                    .fill(.green)
-                    .frame(width: 7, height: 7)
-                Text("\(store.totalActive) active")
+        HStack(alignment: .center, spacing: 10) {
+            if store.settings.isConfigured, let last = store.lastUpdated {
+                Text("Updated \(relativeTime(last))")
                     .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
-
-            if store.settings.isConfigured, let last = store.lastUpdated {
-                Text(relativeTime(last))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
 
             if store.settings.isConfigured {
                 Button {
                     Task { await store.refresh() }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .rotationEffect(.degrees(store.isLoading ? 360 : 0))
-                        .animation(store.isLoading ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: store.isLoading)
+                    Group {
+                        if store.isLoading {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .frame(width: 16, height: 16)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
                 .disabled(store.isLoading)
             }
 
