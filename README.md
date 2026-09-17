@@ -2,7 +2,11 @@
 
 A native macOS menu bar app for viewing your Umami website analytics — live visitors, views and visits for all your websites in one scrolling list — without opening a browser.
 
-![Screenshot](docs/screenshot.png)
+<table>
+  <tr>
+    <td><img src="docs/screenshot.png" alt="UmamiBar popover showing per-site visitors, views and visits" width="380"></td>
+  </tr>
+</table>
 
 ## Build & run
 
