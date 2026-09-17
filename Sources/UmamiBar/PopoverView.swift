@@ -6,10 +6,11 @@ struct PopoverView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @State private var listHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !store.settings.isConfigured {
+            if !store.isReady {
                 emptyState
             } else {
                 header
@@ -19,13 +20,16 @@ struct PopoverView: View {
                 }
             }
 
-            if store.settings.isConfigured {
+            if store.isReady {
                 Divider()
             }
             footer
         }
         .padding(12)
         .frame(width: 380)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
+        .background(WindowHeightResizer(height: contentHeight))
         .task {
             await store.loadWebsites()
             await store.refresh()
@@ -267,7 +271,7 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack(alignment: .center, spacing: 10) {
-            if store.settings.isConfigured, let last = store.lastUpdated {
+            if store.isReady, let last = store.lastUpdated {
                 Text("Updated \(relativeTime(last))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -275,7 +279,7 @@ struct PopoverView: View {
 
             Spacer()
 
-            if store.settings.isConfigured {
+            if store.isReady {
                 Button {
                     Task { await store.refresh() }
                 } label: {
@@ -314,6 +318,51 @@ struct PopoverView: View {
             .menuIndicator(.hidden)
             .fixedSize()
         }
+    }
+}
+
+// MenuBarExtra(.window) grows its panel to fit expanding content but never
+// shrinks it back, leaving dead translucent space around a centered view.
+// Measure the ideal content height and resize the panel to match.
+private struct WindowHeightResizer: NSViewRepresentable {
+    var height: CGFloat
+
+    final class SyncView: NSView {
+        var onMoveToWindow: (() -> Void)?
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil { onMoveToWindow?() }
+        }
+    }
+
+    final class Coordinator {
+        var height: CGFloat = 0
+
+        func sync(_ view: NSView) {
+            guard height > 0,
+                  let window = view.window,
+                  let contentView = window.contentView else { return }
+            guard abs(contentView.bounds.height - height) > 0.5 else { return }
+            window.animator().setContentSize(
+                NSSize(width: contentView.bounds.width, height: height)
+            )
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> SyncView {
+        let view = SyncView(frame: .zero)
+        view.onMoveToWindow = { [weak view, weak coordinator = context.coordinator] in
+            guard let view else { return }
+            coordinator?.sync(view)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: SyncView, context: Context) {
+        context.coordinator.height = height
+        context.coordinator.sync(nsView)
     }
 }
 

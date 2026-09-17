@@ -78,6 +78,14 @@ public struct WebsiteStats: Sendable {
         public var visits: Double
         public var bounces: Double
         public var totaltime: Double
+
+        public init(pageviews: Double, visitors: Double, visits: Double, bounces: Double, totaltime: Double) {
+            self.pageviews = pageviews
+            self.visitors = visitors
+            self.visits = visits
+            self.bounces = bounces
+            self.totaltime = totaltime
+        }
     }
 
     public init(pageviews: Double, visitors: Double, visits: Double, bounces: Double, totaltime: Double, comparison: Comparison? = nil) {

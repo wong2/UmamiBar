@@ -29,18 +29,23 @@ final class AppStore {
     var lastUpdated: Date?
 
     private var refreshTask: Task<Void, Never>?
+    private let demoMode = ProcessInfo.processInfo.environment["UMAMIBAR_DEMO"] == "1"
+
+    var isReady: Bool { demoMode || settings.isConfigured }
 
     init(settings: SettingsStore = SettingsStore()) {
         self.settings = settings
         self.client = UmamiClient(connection: settings.connection)
         self.range = settings.dateRange
-        if settings.isConfigured {
+        if demoMode {
+            installDemoData()
+        } else if settings.isConfigured {
             startAutoRefresh()
         }
     }
 
     func loadWebsites() async {
-        guard settings.isConfigured else { return }
+        guard !demoMode, settings.isConfigured else { return }
         isLoading = true
         defer { isLoading = false }
         do {
@@ -60,7 +65,7 @@ final class AppStore {
     }
 
     func refresh() async {
-        guard settings.isConfigured else { return }
+        guard !demoMode, settings.isConfigured else { return }
         if websites.isEmpty {
             await loadWebsites()
         }
@@ -193,5 +198,50 @@ final class AppStore {
         } else {
             stopAutoRefresh()
         }
+    }
+
+    // Fabricated data for screenshots/previews: UMAMIBAR_DEMO=1
+    private func installDemoData() {
+        func stats(_ visitors: Double, _ views: Double, _ visits: Double,
+                   _ pv: Double, _ vv: Double, _ iv: Double) -> WebsiteStats {
+            WebsiteStats(pageviews: views, visitors: visitors, visits: visits,
+                         bounces: visitors * 0.4, totaltime: visitors * 180,
+                         comparison: .init(pageviews: pv, visitors: vv,
+                                           visits: iv, bounces: 0, totaltime: 0))
+        }
+
+        let shop = Website(id: "demo-shop", name: "acme-shop.com", domain: "acme-shop.com")
+        let blog = Website(id: "demo-blog", name: "blog.janedoe.dev", domain: "blog.janedoe.dev")
+        let docs = Website(id: "demo-docs", name: "docs.example.io", domain: "docs.example.io")
+
+        websites = [shop, blog, docs]
+        sites = [
+            SiteSnapshot(website: shop,
+                         stats: stats(12438, 28412, 15937, 24300, 10765, 13770),
+                         active: 43),
+            SiteSnapshot(website: blog,
+                         stats: stats(3214, 5870, 3990, 5375, 2980, 3720),
+                         active: 8,
+                         detail: SiteDetail(
+                            topPages: [
+                                MetricRow(x: "/", y: 2104),
+                                MetricRow(x: "/posts/swiftui-menubar-apps", y: 1462),
+                                MetricRow(x: "/posts/self-hosting-umami", y: 987),
+                                MetricRow(x: "/about", y: 342),
+                                MetricRow(x: "/posts/homelab-2025", y: 211),
+                            ],
+                            topReferrers: [
+                                MetricRow(x: "news.ycombinator.com", y: 1203),
+                                MetricRow(x: "google.com", y: 891),
+                                MetricRow(x: "t.co", y: 244),
+                                MetricRow(x: "reddit.com", y: 187),
+                                MetricRow(x: "lobste.rs", y: 96),
+                            ])),
+            SiteSnapshot(website: docs,
+                         stats: stats(987, 1452, 1120, 1710, 1155, 1300),
+                         active: 2),
+        ]
+        expandedSiteId = blog.id
+        lastUpdated = Date()
     }
 }
